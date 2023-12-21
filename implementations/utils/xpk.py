@@ -19,6 +19,7 @@ from tempfile import NamedTemporaryFile
 import uuid
 from absl import logging
 from airflow.decorators import task
+from airflow.exceptions import AirflowFailException
 from airflow.hooks.subprocess import SubprocessHook
 from airflow.providers.cncf.kubernetes.operators.kubernetes_pod import KubernetesPodOperator
 from configs import vm_resource
@@ -66,7 +67,7 @@ def run_workload(
       "cd /tmp/xpk",
       (
           "python3 xpk.py workload create"
-          f" --cluster={cluster_name} --workload={workload_id} --command='{run_cmds}'"
+          f" --cluster={cluster_name} --workload={workload_id} --command '{run_cmds}'"
           f" --tpu-type={accelerator_type} --num-slices={num_slices} --docker-image={docker_image}"
       ),
   )
@@ -128,7 +129,9 @@ def wait_for_workload_completion(
     if pod.status.phase in ["Pending", "Running"]:
       logging.info(f"One pod phase is: {pod.status.phase}")
       return False
-    elif pod.status.phase in ["Failed", "Unknown"]:
+    elif pod.status.phase in ["Failed"]:
+      raise AirflowFailException(f"Bad pod phase: {pod.status.phase}")
+    elif pod.status.phase in ["Unknown"]:
       raise RuntimeError(f"Bad pod phase: {pod.status.phase}")
 
   logging.info("All pod(s) phase are succeeded.")
